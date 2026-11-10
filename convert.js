@@ -1,0 +1,60 @@
+// 주문 엑셀 변환 로직. 행 객체 배열만 다룬다(파일 입출력은 index.html).
+// 고객마다 양식이 다르면 아래 상수만 고치면 된다.
+
+const ORDER_COLUMNS = ['상품주문번호', '상품명', '옵션정보', '수량', '수취인명', '수취인연락처1', '수취인연락처2', '우편번호', '배송지', '배송메세지'];
+const MAPPING_COLUMNS = ['상품명', '거래처'];
+const LABEL_COLUMNS = ['받는분성명', '받는분전화번호', '받는분기타연락처', '받는분우편번호', '받는분주소', '품목명', '내품수량', '배송메세지', '고객주문번호'];
+const PO_COLUMNS = ['상품주문번호', '상품명', '옵션', '수량', '수취인명', '연락처', '우편번호', '주소', '배송메세지'];
+const TRACKING_COLUMNS = { orderNo: '고객주문번호', trackingNo: '운송장번호' };
+const DISPATCH_COLUMNS = ['상품주문번호', '배송방법', '택배사', '송장번호'];
+const DISPATCH_FIXED = { method: '택배,등기,소포', carrier: 'CJ대한통운' };
+
+function cleanRows(rows) {
+  return rows
+    .map(row => Object.fromEntries(Object.entries(row).map(([k, v]) => [String(k).trim(), String(v ?? '').trim()])))
+    .filter(row => Object.values(row).some(v => v !== ''));
+}
+
+function missingColumns(rows, required) {
+  const keys = Object.keys(rows[0] || {});
+  return required.filter(c => !keys.includes(c));
+}
+
+// 엑셀이 숫자로 저장해 앞자리 0이 사라진 경우 복구
+function fixPhone(s) {
+  return /^\d{9,10}$/.test(s) && s[0] !== '0' ? '0' + s : s;
+}
+
+function fixZip(s) {
+  return /^\d{1,4}$/.test(s) ? s.padStart(5, '0') : s;
+}
+
+function convertOrders(orderRows, mappingRows) {
+  const orders = cleanRows(orderRows);
+  const missing = missingColumns(orders, ORDER_COLUMNS);
+  if (missing.length) return { ok: false, error: `필요한 열이 없어요: ${missing.join(', ')}` };
+
+  const badQty = orders.filter(o => !/^\d+$/.test(o.수량) || Number(o.수량) <= 0).map(o => o.상품주문번호);
+  if (badQty.length) return { ok: false, error: `수량이 올바르지 않은 주문이 있어요: ${badQty.join(', ')}` };
+
+  const labels = orders.map(o => ({
+    받는분성명: o.수취인명,
+    받는분전화번호: fixPhone(o.수취인연락처1),
+    받는분기타연락처: fixPhone(o.수취인연락처2),
+    받는분우편번호: fixZip(o.우편번호),
+    받는분주소: o.배송지,
+    품목명: o.옵션정보 ? `${o.상품명} / ${o.옵션정보}` : o.상품명,
+    내품수량: o.수량,
+    배송메세지: o.배송메세지,
+    고객주문번호: o.상품주문번호,
+  }));
+
+  return { ok: true, labels, purchaseOrders: {}, unmatched: [] };
+}
+
+const Convert = {
+  ORDER_COLUMNS, MAPPING_COLUMNS, LABEL_COLUMNS, PO_COLUMNS, TRACKING_COLUMNS, DISPATCH_COLUMNS, DISPATCH_FIXED,
+  cleanRows, missingColumns, fixPhone, fixZip, convertOrders,
+};
+if (typeof module !== 'undefined') module.exports = Convert;
+else window.Convert = Convert;
