@@ -37,6 +37,15 @@ function convertOrders(orderRows, mappingRows) {
   const badQty = orders.filter(o => !/^\d+$/.test(o.수량) || Number(o.수량) <= 0).map(o => o.상품주문번호);
   if (badQty.length) return { ok: false, error: `수량이 올바르지 않은 주문이 있어요: ${badQty.join(', ')}` };
 
+  const mapping = cleanRows(mappingRows);
+  // 매칭표가 비어 있으면 전부 미매칭으로 보고, 행이 있을 때만 열을 검사한다
+  const mapMissing = mapping.length ? missingColumns(mapping, MAPPING_COLUMNS) : [];
+  if (mapMissing.length) return { ok: false, error: `매칭표에 필요한 열이 없어요: ${mapMissing.join(', ')}` };
+  const vendorOf = new Map();
+  for (const m of mapping) {
+    if (m.거래처 && !vendorOf.has(m.상품명)) vendorOf.set(m.상품명, m.거래처);
+  }
+
   const labels = orders.map(o => ({
     받는분성명: o.수취인명,
     받는분전화번호: fixPhone(o.수취인연락처1),
@@ -49,12 +58,48 @@ function convertOrders(orderRows, mappingRows) {
     고객주문번호: o.상품주문번호,
   }));
 
-  return { ok: true, labels, purchaseOrders: {}, unmatched: [] };
+  const purchaseOrders = {};
+  const unmatched = [];
+  for (const o of orders) {
+    const vendor = vendorOf.get(o.상품명);
+    if (!vendor) {
+      unmatched.push({ orderNo: o.상품주문번호, productName: o.상품명 });
+      continue;
+    }
+    (purchaseOrders[vendor] ??= []).push({
+      상품주문번호: o.상품주문번호,
+      상품명: o.상품명,
+      옵션: o.옵션정보,
+      수량: o.수량,
+      수취인명: o.수취인명,
+      연락처: fixPhone(o.수취인연락처1),
+      우편번호: fixZip(o.우편번호),
+      주소: o.배송지,
+      배송메세지: o.배송메세지,
+    });
+  }
+
+  return { ok: true, labels, purchaseOrders, unmatched };
+}
+
+function safeFileName(name) {
+  return name.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function purchaseOrderFiles(purchaseOrders, date) {
+  const used = new Map();
+  return Object.entries(purchaseOrders).map(([vendor, rows]) => {
+    const base = safeFileName(vendor);
+    const n = (used.get(base) || 0) + 1;
+    used.set(base, n);
+    const name = n === 1 ? base : `${base} (${n})`;
+    return { fileName: `발주서_${name}_${date}.xlsx`, rows };
+  });
 }
 
 const Convert = {
   ORDER_COLUMNS, MAPPING_COLUMNS, LABEL_COLUMNS, PO_COLUMNS, TRACKING_COLUMNS, DISPATCH_COLUMNS, DISPATCH_FIXED,
-  cleanRows, missingColumns, fixPhone, fixZip, convertOrders,
+  cleanRows, missingColumns, fixPhone, fixZip, convertOrders, safeFileName, purchaseOrderFiles,
 };
 if (typeof module !== 'undefined') module.exports = Convert;
 else window.Convert = Convert;
