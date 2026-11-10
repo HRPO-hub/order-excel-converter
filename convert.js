@@ -82,6 +82,32 @@ function convertOrders(orderRows, mappingRows) {
   return { ok: true, labels, purchaseOrders, unmatched };
 }
 
+function convertTracking(rows) {
+  const data = cleanRows(rows);
+  const { orderNo, trackingNo } = TRACKING_COLUMNS;
+  const missingCols = missingColumns(data, [orderNo, trackingNo]);
+  if (missingCols.length) return { ok: false, error: `필요한 열이 없어요: ${missingCols.join(', ')}` };
+
+  const seen = new Set();
+  const out = [];
+  const missing = [];
+  const duplicates = [];
+  for (const r of data) {
+    const no = r[orderNo];
+    if (seen.has(no)) {
+      if (!duplicates.includes(no)) duplicates.push(no);
+      continue;
+    }
+    seen.add(no);
+    if (!r[trackingNo]) {
+      missing.push(no);
+      continue;
+    }
+    out.push({ 상품주문번호: no, 배송방법: DISPATCH_FIXED.method, 택배사: DISPATCH_FIXED.carrier, 송장번호: r[trackingNo] });
+  }
+  return { ok: true, rows: out, missing, duplicates };
+}
+
 function safeFileName(name) {
   return name.replace(/[\\/:*?"<>|]/g, '_');
 }
@@ -99,7 +125,7 @@ function purchaseOrderFiles(purchaseOrders, date) {
 
 const Convert = {
   ORDER_COLUMNS, MAPPING_COLUMNS, LABEL_COLUMNS, PO_COLUMNS, TRACKING_COLUMNS, DISPATCH_COLUMNS, DISPATCH_FIXED,
-  cleanRows, missingColumns, fixPhone, fixZip, convertOrders, safeFileName, purchaseOrderFiles,
+  cleanRows, missingColumns, fixPhone, fixZip, convertOrders, safeFileName, purchaseOrderFiles, convertTracking,
 };
 if (typeof module !== 'undefined') module.exports = Convert;
 else window.Convert = Convert;

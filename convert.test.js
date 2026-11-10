@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { convertOrders, safeFileName, purchaseOrderFiles } = require('./convert.js');
+const { convertOrders, safeFileName, purchaseOrderFiles, convertTracking } = require('./convert.js');
 
 function order(overrides = {}) {
   return {
@@ -129,4 +129,29 @@ test('파일명 금지 문자 치환', () => {
 test('파일명 충돌 시 (2)', () => {
   const files = purchaseOrderFiles({ 'A/B': [{}], 'A_B': [{}] }, '2026-11-10');
   assert.deepEqual(files.map(f => f.fileName), ['발주서_A_B_2026-11-10.xlsx', '발주서_A_B (2)_2026-11-10.xlsx']);
+});
+
+test('일괄발송: 변환과 고정값, 앞자리 0 유지', () => {
+  const r = convertTracking([{ 고객주문번호: '2026111000001', 운송장번호: '0123456789012' }]);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.rows, [{ 상품주문번호: '2026111000001', 배송방법: '택배,등기,소포', 택배사: 'CJ대한통운', 송장번호: '0123456789012' }]);
+});
+
+test('운송장번호 빈 행 제외 + 경고', () => {
+  const r = convertTracking([{ 고객주문번호: '1', 운송장번호: '' }]);
+  assert.deepEqual(r.rows, []);
+  assert.deepEqual(r.missing, ['1']);
+});
+
+test('중복 주문번호는 첫 번째만 + 경고', () => {
+  const r = convertTracking([{ 고객주문번호: '1', 운송장번호: 'A' }, { 고객주문번호: '1', 운송장번호: 'B' }]);
+  assert.equal(r.rows.length, 1);
+  assert.equal(r.rows[0].송장번호, 'A');
+  assert.deepEqual(r.duplicates, ['1']);
+});
+
+test('송장번호 결과 필수 열 누락', () => {
+  const r = convertTracking([{ 고객주문번호: '1' }]);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /운송장번호/);
 });
