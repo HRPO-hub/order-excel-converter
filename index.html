@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주문 엑셀 변환기</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --text: #1d1c1a; --muted: #6b6862; --line: #e3e0da;
+    --accent: #2f6b4f; --accent-text: #ffffff; --warn-bg: #fdecea; --warn: #b3261e; --ok-bg: #e8f3ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161614; --card: #22211e; --text: #f1efe9; --muted: #a8a49b; --line: #3a3833;
+      --accent: #6fbf95; --accent-text: #10241a; --warn-bg: #3a1d1b; --warn: #ffb4ab; --ok-bg: #1c3127;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 0 0 4px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); font-size: .92rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-top: 16px; }
+  .badge { display: inline-block; background: var(--ok-bg); border-radius: 999px; padding: 4px 12px; font-size: .9rem; margin: 8px 0 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  button { font: inherit; padding: 12px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  label.file { display: block; margin-top: 12px; font-weight: 600; }
+  label.file input { display: block; width: 100%; margin-top: 6px; font: inherit; font-weight: 400; }
+  .result { margin-top: 16px; }
+  .summary { font-weight: 600; }
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin-top: 10px; overflow-wrap: anywhere; }
+  .warn ul { margin: 6px 0 0; padding-left: 20px; }
+  .error { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin-top: 12px; font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>주문 엑셀 변환기</h1>
+  <p class="muted">스마트스토어 주문 엑셀 → CJ대한통운 송장 양식 + 거래처별 발주서, 그리고 송장번호 → 스마트스토어 일괄발송까지.</p>
+  <span class="badge">🔒 파일은 이 컴퓨터 밖으로 나가지 않아요</span>
+  <div class="row">
+    <button class="primary" id="trySample">샘플로 해보기</button>
+    <button id="downloadSamples">샘플 엑셀 내려받기</button>
+  </div>
+
+  <section class="card">
+    <h2>1단계 · 송장과 발주서 만들기</h2>
+    <p class="muted">스마트스토어 「발주/발송 관리」에서 내려받은 엑셀과, 상품명·거래처 두 열로 된 매칭표를 올려주세요.<br>
+      비밀번호가 걸린 파일은 열 수 없어요. 내려받을 때 비밀번호 설정을 해제해 주세요.</p>
+    <label class="file">주문 엑셀<input type="file" id="orderFile" accept=".xlsx,.xls,.csv"></label>
+    <label class="file">매칭표 엑셀<input type="file" id="mappingFile" accept=".xlsx,.xls,.csv"></label>
+    <div class="row"><button class="primary" id="convertOrders" disabled>변환</button></div>
+    <div class="result" id="orderResult" hidden>
+      <p class="summary" id="orderSummary"></p>
+      <div class="warn" id="unmatchedBox" hidden>
+        매칭표에 없는 상품이 있어요. 송장에는 들어갔지만 <b>발주서에서는 빠졌어요.</b>
+        <ul id="unmatchedList"></ul>
+      </div>
+      <div class="row">
+        <button class="primary" id="downloadLabels">송장 내려받기</button>
+        <button class="primary" id="downloadPOs">발주서 zip 내려받기</button>
+      </div>
+    </div>
+    <div class="error" id="orderError" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>2단계 · 송장번호를 스마트스토어에 등록</h2>
+    <p class="muted">택배사에서 받은 송장번호 결과 엑셀(고객주문번호·운송장번호 열)을 올리면, 스마트스토어 「엑셀 일괄발송」에 바로 올릴 파일로 바꿔드려요.</p>
+    <label class="file">송장번호 결과 엑셀<input type="file" id="trackingFile" accept=".xlsx,.xls,.csv"></label>
+    <div class="row"><button class="primary" id="convertTracking" disabled>변환</button></div>
+    <div class="result" id="trackingResult" hidden>
+      <p class="summary" id="trackingSummary"></p>
+      <div class="warn" id="missingBox" hidden>송장번호가 비어 있어 빠진 주문이 있어요.<ul id="missingList"></ul></div>
+      <div class="warn" id="dupBox" hidden>같은 주문번호가 여러 번 있어 첫 번째만 썼어요.<ul id="dupList"></ul></div>
+      <div class="row"><button class="primary" id="downloadDispatch">일괄발송 파일 내려받기</button></div>
+    </div>
+    <div class="error" id="trackingError" hidden></div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="convert.js"></script>
+<script src="sample.js"></script>
+<script>
+  const C = window.Convert, S = window.Sample;
+  const $ = id => document.getElementById(id);
+  let orderOut = null, trackingOut = null;
+
+  const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  async function readRows(file) {
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      // raw: 13자리 주문번호가 지수 표기로 깨지지 않게 원래 값으로 읽는다
+      return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: true });
+    } catch {
+      throw new Error(`「${file.name}」 파일을 열 수 없어요. 스마트스토어에서 비밀번호 없이 다시 내려받아 주세요.`);
+    }
+  }
+
+  function workbook(rows, header) {
+    const ws = XLSX.utils.json_to_sheet(rows, { header });
+    ws['!cols'] = header.map(() => ({ wch: 18 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    return wb;
+  }
+
+  const xlsxBytes = (rows, header) => XLSX.write(workbook(rows, header), { type: 'array', bookType: 'xlsx' });
+
+  function save(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function fillList(ul, items) {
+    ul.replaceChildren(...items.map(t => Object.assign(document.createElement('li'), { textContent: t })));
+  }
+
+  function showError(id, msg) { $(id).textContent = msg; $(id).hidden = !msg; }
+
+  function showOrders(r) {
+    orderOut = r.ok ? r : null;
+    $('orderResult').hidden = !r.ok;
+    showError('orderError', r.ok ? '' : r.error);
+    if (!r.ok) return;
+    const vendors = Object.keys(r.purchaseOrders);
+    $('orderSummary').textContent = `주문 ${r.labels.length}건 → 송장 ${r.labels.length}건, 발주서 ${vendors.length}곳 (${vendors.join(', ') || '없음'})`;
+    $('unmatchedBox').hidden = !r.unmatched.length;
+    fillList($('unmatchedList'), r.unmatched.map(u => `${u.productName} (주문 ${u.orderNo})`));
+    $('downloadPOs').disabled = !vendors.length;
+  }
+
+  function showTracking(r) {
+    trackingOut = r.ok ? r : null;
+    $('trackingResult').hidden = !r.ok;
+    showError('trackingError', r.ok ? '' : r.error);
+    if (!r.ok) return;
+    $('trackingSummary').textContent = `송장번호 ${r.rows.length}건을 일괄발송 양식으로 바꿨어요.`;
+    $('missingBox').hidden = !r.missing.length;
+    fillList($('missingList'), r.missing.map(n => `주문 ${n}`));
+    $('dupBox').hidden = !r.duplicates.length;
+    fillList($('dupList'), r.duplicates.map(n => `주문 ${n}`));
+    $('downloadDispatch').disabled = !r.rows.length;
+  }
+
+  $('orderFile').onchange = $('mappingFile').onchange = () => {
+    $('convertOrders').disabled = !($('orderFile').files[0] && $('mappingFile').files[0]);
+  };
+  $('trackingFile').onchange = () => { $('convertTracking').disabled = !$('trackingFile').files[0]; };
+
+  $('convertOrders').onclick = async () => {
+    try {
+      const [orders, mapping] = await Promise.all([readRows($('orderFile').files[0]), readRows($('mappingFile').files[0])]);
+      showOrders(C.convertOrders(orders, mapping));
+    } catch (e) { showOrders({ ok: false, error: e.message }); }
+  };
+
+  $('convertTracking').onclick = async () => {
+    try { showTracking(C.convertTracking(await readRows($('trackingFile').files[0]))); }
+    catch (e) { showTracking({ ok: false, error: e.message }); }
+  };
+
+  $('trySample').onclick = () => {
+    const r = C.convertOrders(S.SAMPLE_ORDERS, S.SAMPLE_MAPPING);
+    showOrders(r);
+    showTracking(C.convertTracking(S.sampleTracking(r.labels)));
+    $('orderResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  $('downloadLabels').onclick = () => {
+    XLSX.writeFile(workbook(orderOut.labels, C.LABEL_COLUMNS), `CJ대한통운_송장_${today()}.xlsx`);
+  };
+
+  $('downloadPOs').onclick = async () => {
+    const zip = new JSZip();
+    for (const f of C.purchaseOrderFiles(orderOut.purchaseOrders, today())) zip.file(f.fileName, xlsxBytes(f.rows, C.PO_COLUMNS));
+    save(await zip.generateAsync({ type: 'blob' }), `발주서_${today()}.zip`);
+  };
+
+  $('downloadDispatch').onclick = () => {
+    XLSX.writeFile(workbook(trackingOut.rows, C.DISPATCH_COLUMNS), `스마트스토어_일괄발송_${today()}.xlsx`);
+  };
+
+  $('downloadSamples').onclick = async () => {
+    const r = C.convertOrders(S.SAMPLE_ORDERS, S.SAMPLE_MAPPING);
+    const zip = new JSZip();
+    zip.file('샘플_주문.xlsx', xlsxBytes(S.SAMPLE_ORDERS, Object.keys(S.SAMPLE_ORDERS[0])));
+    zip.file('샘플_매칭표.xlsx', xlsxBytes(S.SAMPLE_MAPPING, C.MAPPING_COLUMNS));
+    zip.file('샘플_송장번호결과.xlsx', xlsxBytes(S.sampleTracking(r.labels), ['고객주문번호', '받는분성명', '운송장번호']));
+    save(await zip.generateAsync({ type: 'blob' }), '샘플_파일.zip');
+  };
+</script>
+</body>
+</html>
