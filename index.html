@@ -2,87 +2,158 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>주문 엑셀 변환기</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
   :root {
-    --bg: #f6f5f2; --card: #ffffff; --text: #1d1c1a; --muted: #6b6862; --line: #e3e0da;
-    --accent: #2f6b4f; --accent-text: #ffffff; --warn-bg: #fdecea; --warn: #b3261e; --ok-bg: #e8f3ec;
+    --bg: #f5f4f0; --card: #ffffff; --text: #1d1c1a; --muted: #6b6862; --line: #e4e1da;
+    --accent: #2f6b4f; --accent-hover: #255a41; --accent-soft: #e6f1eb; --accent-text: #ffffff;
+    --warn-bg: #fdecea; --warn: #a8261d; --drop-bg: #faf9f6;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #161614; --card: #22211e; --text: #f1efe9; --muted: #a8a49b; --line: #3a3833;
-      --accent: #6fbf95; --accent-text: #10241a; --warn-bg: #3a1d1b; --warn: #ffb4ab; --ok-bg: #1c3127;
+      --bg: #151513; --card: #1f1e1b; --text: #f1efe9; --muted: #a8a49b; --line: #36342f;
+      --accent: #6fbf95; --accent-hover: #86cfa8; --accent-soft: #1d3428; --accent-text: #0f2318;
+      --warn-bg: #3a1d1b; --warn: #ffb4ab; --drop-bg: #191816;
+      --shadow: none;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
-  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 1.6rem; margin: 0 0 4px; }
-  h2 { font-size: 1.15rem; margin: 0 0 4px; }
-  p { margin: 0 0 12px; }
-  .muted { color: var(--muted); font-size: .92rem; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-top: 16px; }
-  .badge { display: inline-block; background: var(--ok-bg); border-radius: 999px; padding: 4px 12px; font-size: .9rem; margin: 8px 0 4px; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  button { font: inherit; padding: 12px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 "Pretendard Variable", Pretendard, system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    word-break: keep-all; overflow-wrap: anywhere;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left)); }
+
+  /* 상단 */
+  header h1 { font-size: clamp(1.5rem, 4vw, 2rem); letter-spacing: -0.02em; margin: 0 0 6px; }
+  header p { color: var(--muted); margin: 0; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: .88rem; border-radius: 999px; padding: 5px 12px; margin-top: 14px; }
+  .flow { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 20px 0 0; counter-reset: s; }
+  .flow li { counter-increment: s; display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: .92rem; }
+  .flow li::before { content: counter(s); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-size: .8rem; font-weight: 700; flex: none; }
+  .top-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+
+  /* 카드 배치: 넓은 화면은 두 칸, 좁은 화면은 한 칸 */
+  .grid { display: grid; gap: 16px; margin-top: 24px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; box-shadow: var(--shadow); min-width: 0; }
+  .card h2 { font-size: 1.15rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .step { color: var(--accent); font-weight: 700; font-size: .85rem; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
+
+  /* 파일 올리는 상자 */
+  .drop { position: relative; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 14px; margin-top: 10px;
+    border: 1.5px dashed var(--line); border-radius: 12px; background: var(--drop-bg); cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .drop.has { border-style: solid; border-color: var(--accent); }
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .drop .icon { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--card); border: 1px solid var(--line); font-size: 1.1rem; }
+  .drop .txt { min-width: 0; }
+  .drop .label { display: block; font-weight: 600; }
+  .drop .name { display: block; color: var(--muted); font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drop.has .name { color: var(--accent); font-weight: 600; }
+
+  /* 버튼 */
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  button { font: inherit; min-height: 44px; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; transition: background .15s, border-color .15s, opacity .15s; touch-action: manipulation; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  label.file { display: block; margin-top: 12px; font-weight: 600; }
-  label.file input { display: block; width: 100%; margin-top: 6px; font: inherit; font-weight: 400; }
-  .result { margin-top: 16px; }
-  .summary { font-weight: 600; }
-  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin-top: 10px; overflow-wrap: anywhere; }
-  .warn ul { margin: 6px 0 0; padding-left: 20px; }
-  .error { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin-top: 12px; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .actions button { flex: 1 1 160px; }
+
+  /* 결과 */
+  .result { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .summary { font-weight: 600; margin: 0; }
+  .warn, .error { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin-top: 12px; font-size: .92rem; }
+  .warn ul { margin: 6px 0 0; padding-left: 20px; max-height: 160px; overflow-y: auto; }
+  .error { font-weight: 600; }
   [hidden] { display: none !important; }
+
+  @media (max-width: 520px) {
+    main { padding-top: 24px; }
+    .card { padding: 18px; border-radius: 14px; }
+    .top-actions button, .actions button { flex: 1 1 100%; }
+    .flow li { flex: 1 1 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>주문 엑셀 변환기</h1>
-  <p class="muted">스마트스토어 주문 엑셀 → CJ대한통운 송장 양식 + 거래처별 발주서, 그리고 송장번호 → 스마트스토어 일괄발송까지.</p>
-  <span class="badge">🔒 파일은 이 컴퓨터 밖으로 나가지 않아요</span>
-  <div class="row">
-    <button class="primary" id="trySample">샘플로 해보기</button>
-    <button id="downloadSamples">샘플 엑셀 내려받기</button>
+  <header>
+    <h1>주문 엑셀 변환기</h1>
+    <p>스마트스토어 주문 엑셀을 넣으면 CJ대한통운 송장과 거래처별 발주서가, 송장번호를 넣으면 스마트스토어 일괄발송 파일이 나와요.</p>
+    <span class="badge">🔒 파일은 이 컴퓨터 밖으로 나가지 않아요</span>
+    <ol class="flow">
+      <li>주문 엑셀과 매칭표 올리기</li>
+      <li>송장·발주서 내려받기</li>
+      <li>송장번호로 일괄발송 파일 만들기</li>
+    </ol>
+    <div class="top-actions">
+      <button class="primary" id="trySample">샘플로 해보기</button>
+      <button id="downloadSamples">샘플 엑셀 내려받기</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card" id="orderCard">
+      <span class="step">1단계</span>
+      <h2>송장과 발주서 만들기</h2>
+      <p class="hint">스마트스토어 「발주/발송 관리」에서 내려받은 엑셀과, 상품명·거래처 두 열로 된 매칭표를 올려주세요. 비밀번호가 걸린 파일은 열 수 없으니 내려받을 때 비밀번호를 해제해 주세요.</p>
+      <label class="drop" data-for="orderFile">
+        <input type="file" id="orderFile" accept=".xlsx,.xls,.csv">
+        <span class="icon" aria-hidden="true">📦</span>
+        <span class="txt"><span class="label">주문 엑셀</span><span class="name">끌어다 놓거나 눌러서 선택</span></span>
+      </label>
+      <label class="drop" data-for="mappingFile">
+        <input type="file" id="mappingFile" accept=".xlsx,.xls,.csv">
+        <span class="icon" aria-hidden="true">🔗</span>
+        <span class="txt"><span class="label">매칭표 엑셀</span><span class="name">끌어다 놓거나 눌러서 선택</span></span>
+      </label>
+      <div class="actions"><button class="primary" id="convertOrders" disabled>변환</button></div>
+      <div class="result" id="orderResult" hidden>
+        <p class="summary" id="orderSummary"></p>
+        <div class="warn" id="unmatchedBox" hidden>
+          매칭표에 없는 상품이 있어요. 송장에는 들어갔지만 <b>발주서에서는 빠졌어요.</b>
+          <ul id="unmatchedList"></ul>
+        </div>
+        <div class="actions">
+          <button class="primary" id="downloadLabels">송장 내려받기</button>
+          <button class="primary" id="downloadPOs">발주서 zip 내려받기</button>
+        </div>
+      </div>
+      <div class="error" id="orderError" hidden></div>
+    </section>
+
+    <section class="card" id="trackingCard">
+      <span class="step">2단계</span>
+      <h2>송장번호를 스마트스토어에 등록</h2>
+      <p class="hint">택배사에서 받은 송장번호 결과 엑셀(고객주문번호·운송장번호 열)을 올리면, 스마트스토어 「엑셀 일괄발송」에 바로 올릴 파일로 바꿔드려요.</p>
+      <label class="drop" data-for="trackingFile">
+        <input type="file" id="trackingFile" accept=".xlsx,.xls,.csv">
+        <span class="icon" aria-hidden="true">🚚</span>
+        <span class="txt"><span class="label">송장번호 결과 엑셀</span><span class="name">끌어다 놓거나 눌러서 선택</span></span>
+      </label>
+      <div class="actions"><button class="primary" id="convertTracking" disabled>변환</button></div>
+      <div class="result" id="trackingResult" hidden>
+        <p class="summary" id="trackingSummary"></p>
+        <div class="warn" id="missingBox" hidden>송장번호가 비어 있어 빠진 주문이 있어요.<ul id="missingList"></ul></div>
+        <div class="warn" id="dupBox" hidden>같은 주문번호가 여러 번 있어 첫 번째만 썼어요.<ul id="dupList"></ul></div>
+        <div class="warn" id="noOrderBox" hidden>주문번호가 없는 송장은 스마트스토어에 올릴 수 없어 뺐어요(직접 보낸 택배 등).<ul id="noOrderList"></ul></div>
+        <div class="actions"><button class="primary" id="downloadDispatch">일괄발송 파일 내려받기</button></div>
+      </div>
+      <div class="error" id="trackingError" hidden></div>
+    </section>
   </div>
-
-  <section class="card">
-    <h2>1단계 · 송장과 발주서 만들기</h2>
-    <p class="muted">스마트스토어 「발주/발송 관리」에서 내려받은 엑셀과, 상품명·거래처 두 열로 된 매칭표를 올려주세요.<br>
-      비밀번호가 걸린 파일은 열 수 없어요. 내려받을 때 비밀번호 설정을 해제해 주세요.</p>
-    <label class="file">주문 엑셀<input type="file" id="orderFile" accept=".xlsx,.xls,.csv"></label>
-    <label class="file">매칭표 엑셀<input type="file" id="mappingFile" accept=".xlsx,.xls,.csv"></label>
-    <div class="row"><button class="primary" id="convertOrders" disabled>변환</button></div>
-    <div class="result" id="orderResult" hidden>
-      <p class="summary" id="orderSummary"></p>
-      <div class="warn" id="unmatchedBox" hidden>
-        매칭표에 없는 상품이 있어요. 송장에는 들어갔지만 <b>발주서에서는 빠졌어요.</b>
-        <ul id="unmatchedList"></ul>
-      </div>
-      <div class="row">
-        <button class="primary" id="downloadLabels">송장 내려받기</button>
-        <button class="primary" id="downloadPOs">발주서 zip 내려받기</button>
-      </div>
-    </div>
-    <div class="error" id="orderError" hidden></div>
-  </section>
-
-  <section class="card">
-    <h2>2단계 · 송장번호를 스마트스토어에 등록</h2>
-    <p class="muted">택배사에서 받은 송장번호 결과 엑셀(고객주문번호·운송장번호 열)을 올리면, 스마트스토어 「엑셀 일괄발송」에 바로 올릴 파일로 바꿔드려요.</p>
-    <label class="file">송장번호 결과 엑셀<input type="file" id="trackingFile" accept=".xlsx,.xls,.csv"></label>
-    <div class="row"><button class="primary" id="convertTracking" disabled>변환</button></div>
-    <div class="result" id="trackingResult" hidden>
-      <p class="summary" id="trackingSummary"></p>
-      <div class="warn" id="missingBox" hidden>송장번호가 비어 있어 빠진 주문이 있어요.<ul id="missingList"></ul></div>
-      <div class="warn" id="dupBox" hidden>같은 주문번호가 여러 번 있어 첫 번째만 썼어요.<ul id="dupList"></ul></div>
-      <div class="warn" id="noOrderBox" hidden>주문번호가 없는 송장은 스마트스토어에 올릴 수 없어 뺐어요(직접 보낸 택배 등).<ul id="noOrderList"></ul></div>
-      <div class="row"><button class="primary" id="downloadDispatch">일괄발송 파일 내려받기</button></div>
-    </div>
-    <div class="error" id="trackingError" hidden></div>
-  </section>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -123,9 +194,14 @@
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = name;
+    document.body.appendChild(a); // 일부 모바일 브라우저는 문서에 붙은 링크만 내려받는다
     a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
+
+  const saveXlsx = (rows, header, name) =>
+    save(new Blob([xlsxBytes(rows, header)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), name);
 
   function fillList(ul, items) {
     ul.replaceChildren(...items.map(t => Object.assign(document.createElement('li'), { textContent: t })));
@@ -160,15 +236,41 @@
     $('downloadDispatch').disabled = !r.rows.length;
   }
 
+  // 파일 상자: 고른 파일 이름 표시 + 끌어다 놓기
+  document.querySelectorAll('.drop').forEach(box => {
+    const input = box.querySelector('input');
+    const name = box.querySelector('.name');
+    const placeholder = name.textContent;
+    input.addEventListener('change', () => {
+      const f = input.files[0];
+      name.textContent = f ? f.name : placeholder;
+      box.classList.toggle('has', !!f);
+    });
+    box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('over'); });
+    box.addEventListener('dragleave', () => box.classList.remove('over'));
+    box.addEventListener('drop', e => {
+      e.preventDefault();
+      box.classList.remove('over');
+      if (!e.dataTransfer.files.length) return;
+      input.files = e.dataTransfer.files;
+      input.dispatchEvent(new Event('change'));
+    });
+  });
+  // 상자 밖에 떨어뜨려도 브라우저가 파일을 열어버리지 않게
+  addEventListener('dragover', e => e.preventDefault());
+  addEventListener('drop', e => e.preventDefault());
+
   // 파일을 새로 고르면 이전 결과(샘플 포함)를 지워 엉뚱한 파일을 내려받지 않게 한다
-  $('orderFile').onchange = $('mappingFile').onchange = () => {
+  $('orderFile').addEventListener('change', resetOrders);
+  $('mappingFile').addEventListener('change', resetOrders);
+  function resetOrders() {
     orderOut = null; $('orderResult').hidden = true; showError('orderError', '');
     $('convertOrders').disabled = !($('orderFile').files[0] && $('mappingFile').files[0]);
-  };
-  $('trackingFile').onchange = () => {
+  }
+  $('trackingFile').addEventListener('change', () => {
     trackingOut = null; $('trackingResult').hidden = true; showError('trackingError', '');
     $('convertTracking').disabled = !$('trackingFile').files[0];
-  };
+  });
 
   $('convertOrders').onclick = async () => {
     try {
@@ -186,12 +288,10 @@
     const r = C.convertOrders(S.SAMPLE_ORDERS, S.SAMPLE_MAPPING);
     showOrders(r);
     showTracking(C.convertTracking(S.sampleTracking(r.labels)));
-    $('orderResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $('orderCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  $('downloadLabels').onclick = () => {
-    XLSX.writeFile(workbook(orderOut.labels, C.LABEL_COLUMNS), `CJ대한통운_송장_${today()}.xlsx`);
-  };
+  $('downloadLabels').onclick = () => saveXlsx(orderOut.labels, C.LABEL_COLUMNS, `CJ대한통운_송장_${today()}.xlsx`);
 
   $('downloadPOs').onclick = async () => {
     const zip = new JSZip();
@@ -199,9 +299,7 @@
     save(await zip.generateAsync({ type: 'blob' }), `발주서_${today()}.zip`);
   };
 
-  $('downloadDispatch').onclick = () => {
-    XLSX.writeFile(workbook(trackingOut.rows, C.DISPATCH_COLUMNS), `스마트스토어_일괄발송_${today()}.xlsx`);
-  };
+  $('downloadDispatch').onclick = () => saveXlsx(trackingOut.rows, C.DISPATCH_COLUMNS, `스마트스토어_일괄발송_${today()}.xlsx`);
 
   $('downloadSamples').onclick = async () => {
     const r = C.convertOrders(S.SAMPLE_ORDERS, S.SAMPLE_MAPPING);
