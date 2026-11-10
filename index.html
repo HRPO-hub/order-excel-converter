@@ -77,6 +77,8 @@
   .warn ul { margin: 6px 0 0; padding-left: 20px; max-height: 160px; overflow-y: auto; }
   .error { font-weight: 600; }
   [hidden] { display: none !important; }
+  .libfail { margin-top: 20px; }
+  body.nolib #downloadSamples, body.nolib #downloadLabels, body.nolib #downloadPOs, body.nolib #downloadDispatch { display: none; }
 
   @media (max-width: 520px) {
     main { padding-top: 24px; }
@@ -126,6 +128,7 @@
           매칭표에 없는 상품이 있어요. 송장에는 들어갔지만 <b>발주서에서는 빠졌어요.</b>
           <ul id="unmatchedList"></ul>
         </div>
+        <div class="warn" id="orderNoBox" hidden>상품주문번호가 비었거나 겹치는 주문이 있어요. 2단계에서 송장번호와 연결되지 않을 수 있어요.<ul id="orderNoList"></ul></div>
         <div class="actions">
           <button class="primary" id="downloadLabels">송장 내려받기</button>
           <button class="primary" id="downloadPOs">발주서 zip 내려받기</button>
@@ -156,8 +159,9 @@
   </div>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- integrity: 파일이 바꿔치기되면 브라우저가 실행을 거부한다(고객 주문 정보 보호) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="convert.js"></script>
 <script src="sample.js"></script>
 <script>
@@ -170,7 +174,11 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
+  const LIB_ERROR = '엑셀 처리 도구를 불러오지 못했어요. 인터넷 연결을 확인하고 페이지를 새로고침해 주세요.';
+  const libsReady = () => typeof XLSX !== 'undefined' && typeof JSZip !== 'undefined';
+
   async function readRows(file) {
+    if (!libsReady()) throw new Error(LIB_ERROR);
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       // raw: 13자리 주문번호가 지수 표기로 깨지지 않게 원래 값으로 읽는다
@@ -181,7 +189,13 @@
   }
 
   function workbook(rows, header) {
-    const ws = XLSX.utils.json_to_sheet(rows, { header });
+    // 수량 열만 숫자 셀로(엑셀에서 합계 계산 가능). 나머지는 앞자리 0을 지키려고 글자 그대로
+    const typed = rows.map(r => {
+      const o = { ...r };
+      for (const c of C.NUMBER_COLUMNS) if (c in o && /^\d+$/.test(o[c])) o[c] = Number(o[c]);
+      return o;
+    });
+    const ws = XLSX.utils.json_to_sheet(typed, { header });
     ws['!cols'] = header.map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -219,6 +233,12 @@
     $('unmatchedBox').hidden = !r.unmatched.length;
     fillList($('unmatchedList'), r.unmatched.map(u => `${u.productName} (주문 ${u.orderNo})`));
     $('downloadPOs').disabled = !vendors.length;
+    const noIssues = [
+      ...(r.emptyOrderNoCount ? [`주문번호가 빈 주문 ${r.emptyOrderNoCount}건`] : []),
+      ...r.duplicateOrderNos.map(n => `겹치는 주문번호 ${n}`),
+    ];
+    $('orderNoBox').hidden = !noIssues.length;
+    fillList($('orderNoList'), noIssues);
   }
 
   function showTracking(r) {
@@ -300,6 +320,12 @@
   };
 
   $('downloadDispatch').onclick = () => saveXlsx(trackingOut.rows, C.DISPATCH_COLUMNS, `스마트스토어_일괄발송_${today()}.xlsx`);
+
+  if (!libsReady()) {
+    document.body.classList.add('nolib');
+    const banner = Object.assign(document.createElement('div'), { className: 'error libfail', textContent: LIB_ERROR });
+    document.querySelector('header').append(banner);
+  }
 
   $('downloadSamples').onclick = async () => {
     const r = C.convertOrders(S.SAMPLE_ORDERS, S.SAMPLE_MAPPING);

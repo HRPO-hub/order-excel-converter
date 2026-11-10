@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { convertOrders, safeFileName, purchaseOrderFiles, convertTracking } = require('./convert.js');
+const { convertOrders, safeFileName, purchaseOrderFiles, convertTracking, fixPhone } = require('./convert.js');
 
 function order(overrides = {}) {
   return {
@@ -184,4 +184,46 @@ test('거래처명이 constructor 같은 이름이어도 동작', () => {
   const r = convertOrders([order()], [{ 상품명: '국산 햇양파 3kg', 거래처: 'constructor' }]);
   assert.equal(r.ok, true);
   assert.equal(r.purchaseOrders['constructor'].length, 1);
+});
+
+test('빈 주문 파일은 주문이 없다고 안내', () => {
+  const r = convertOrders([], []);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /한 건도 없어요/);
+  const t = convertTracking([]);
+  assert.equal(t.ok, false);
+  assert.match(t.error, /한 건도 없어요/);
+});
+
+test('서울 일반전화·0504 안심번호 앞자리 0 복구', () => {
+  assert.equal(fixPhone('21234567'), '021234567');
+  assert.equal(fixPhone('50412345678'), '050412345678');
+  assert.equal(fixPhone('12345678'), '12345678'); // 2로 시작하지 않는 8자리는 그대로
+});
+
+test('수량 앞자리 0 정리', () => {
+  const r = convertOrders([order({ 수량: '02' })], MAP);
+  assert.equal(r.labels[0].내품수량, '2');
+  assert.equal(r.purchaseOrders['무안농산'][0].수량, '2');
+});
+
+test('송장번호: 빈 행 뒤에 번호 있는 행이 오면 번호 사용', () => {
+  const r = convertTracking([{ 고객주문번호: '1', 운송장번호: '' }, { 고객주문번호: '1', 운송장번호: 'B' }]);
+  assert.deepEqual(r.rows.map(x => x.송장번호), ['B']);
+  assert.deepEqual(r.missing, []);
+  assert.deepEqual(r.duplicates, ['1']);
+});
+
+test('주문 파일의 빈·중복 상품주문번호 경고', () => {
+  const r = convertOrders([order(), order(), order({ 상품주문번호: '' })], MAP);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.duplicateOrderNos, ['2026111000001']);
+  assert.equal(r.emptyOrderNoCount, 1);
+});
+
+test('파일명: (2)가 실제 이름과 겹치거나 대소문자만 다른 경우', () => {
+  const a = purchaseOrderFiles({ 'x/y': [{}], 'x_y': [{}], 'x_y (2)': [{}] }, 'd').map(f => f.fileName);
+  assert.equal(new Set(a.map(n => n.toLowerCase())).size, 3, a.join());
+  const b = purchaseOrderFiles({ ABC: [{}], abc: [{}] }, 'd').map(f => f.fileName);
+  assert.deepEqual(b, ['발주서_ABC_d.xlsx', '발주서_abc (2)_d.xlsx']);
 });
