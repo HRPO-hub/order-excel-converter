@@ -77,6 +77,21 @@
   .warn ul { margin: 6px 0 0; padding-left: 20px; max-height: 160px; overflow-y: auto; }
   .error { font-weight: 600; }
   [hidden] { display: none !important; }
+
+  /* 결과 미리보기 표: 표만 좌우로 밀리고 페이지는 넘치지 않게 */
+  .preview { margin-top: 16px; min-width: 0; }
+  .preview-title { font-size: .88rem; font-weight: 600; color: var(--muted); margin: 0 0 8px; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+  .tabs button { flex: none; min-height: 36px; padding: 6px 12px; border-radius: 999px; font-size: .88rem; white-space: nowrap; }
+  .tabs button[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .table-wrap { overflow: auto; max-height: 420px; margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  .table-wrap table { border-collapse: collapse; font-size: .85rem; width: max-content; min-width: 100%; }
+  .table-wrap th, .table-wrap td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: left; }
+  .table-wrap th { position: sticky; top: 0; z-index: 1; background: var(--drop-bg); font-weight: 600; }
+  .table-wrap tr:last-child td { border-bottom: 0; }
+  .table-wrap tr.miss td { background: var(--warn-bg); color: var(--warn); }
+  .preview .more { margin-top: 8px; min-height: 36px; font-size: .88rem; }
+  .legend { font-size: .82rem; color: var(--warn); margin: 6px 0 0; }
   .libfail { margin-top: 20px; }
   body.nolib #downloadSamples, body.nolib #downloadLabels, body.nolib #downloadPOs, body.nolib #downloadDispatch { display: none; }
 
@@ -129,6 +144,7 @@
           <ul id="unmatchedList"></ul>
         </div>
         <div class="warn" id="orderNoBox" hidden>상품주문번호가 비었거나 겹치는 주문이 있어요. 2단계에서 송장번호와 연결되지 않을 수 있어요.<ul id="orderNoList"></ul></div>
+        <div class="preview" id="orderPreview"></div>
         <div class="actions">
           <button class="primary" id="downloadLabels">송장 내려받기</button>
           <button class="primary" id="downloadPOs">발주서 zip 내려받기</button>
@@ -152,6 +168,7 @@
         <div class="warn" id="missingBox" hidden>송장번호가 비어 있어 빠진 주문이 있어요.<ul id="missingList"></ul></div>
         <div class="warn" id="dupBox" hidden>같은 주문번호가 여러 번 있어 첫 번째만 썼어요.<ul id="dupList"></ul></div>
         <div class="warn" id="noOrderBox" hidden>주문번호가 없는 송장은 스마트스토어에 올릴 수 없어 뺐어요(직접 보낸 택배 등).<ul id="noOrderList"></ul></div>
+        <div class="preview" id="trackingPreview"></div>
         <div class="actions"><button class="primary" id="downloadDispatch">일괄발송 파일 내려받기</button></div>
       </div>
       <div class="error" id="trackingError" hidden></div>
@@ -221,6 +238,53 @@
     ul.replaceChildren(...items.map(t => Object.assign(document.createElement('li'), { textContent: t })));
   }
 
+  // 미리보기 표. tabs: [{ name, rows, header, isMiss?(row) }]. 내려받는 파일과 같은 데이터를 그린다.
+  const PREVIEW_ROWS = 5;
+  function renderPreview(box, title, tabs) {
+    box.replaceChildren();
+    if (!tabs.some(t => t.rows.length)) return;
+    let active = 0, expanded = false;
+    const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+    const bar = el('div', { className: 'tabs' });
+    bar.setAttribute('role', 'tablist');
+    const wrap = el('div', { className: 'table-wrap' });
+    wrap.tabIndex = 0; // 키보드로도 표를 좌우로 스크롤
+    const legend = el('p', { className: 'legend', textContent: '빨간 줄: 매칭표에 없어 발주서에서 빠진 주문' });
+    const more = el('button', { className: 'more' });
+
+    function draw() {
+      const t = tabs[active];
+      [...bar.children].forEach((b, i) => b.setAttribute('aria-selected', String(i === active)));
+      const shown = expanded ? t.rows : t.rows.slice(0, PREVIEW_ROWS);
+      const table = el('table');
+      const head = table.createTHead().insertRow();
+      for (const h of t.header) head.append(el('th', { textContent: h }));
+      const body = table.createTBody();
+      for (const r of shown) {
+        const tr = body.insertRow();
+        if (t.isMiss && t.isMiss(r)) tr.className = 'miss';
+        for (const h of t.header) tr.insertCell().textContent = r[h] ?? '';
+      }
+      wrap.replaceChildren(table);
+      wrap.setAttribute('aria-label', `${t.name} 미리보기`);
+      legend.hidden = !(t.isMiss && t.rows.some(t.isMiss));
+      more.hidden = t.rows.length <= PREVIEW_ROWS;
+      more.textContent = expanded ? '접기' : `전체 보기 (${t.rows.length}건)`;
+    }
+
+    tabs.forEach((t, i) => {
+      const b = el('button', { textContent: `${t.name} ${t.rows.length}` });
+      b.setAttribute('role', 'tab');
+      b.onclick = () => { active = i; expanded = false; draw(); };
+      bar.append(b);
+    });
+    more.onclick = () => { expanded = !expanded; draw(); };
+    box.append(el('p', { className: 'preview-title', textContent: title }));
+    if (tabs.length > 1) box.append(bar);
+    box.append(wrap, legend, more);
+    draw();
+  }
+
   function showError(id, msg) { $(id).textContent = msg; $(id).hidden = !msg; }
 
   function showOrders(r) {
@@ -239,6 +303,11 @@
     ];
     $('orderNoBox').hidden = !noIssues.length;
     fillList($('orderNoList'), noIssues);
+    const missNos = new Set(r.unmatched.map(u => u.orderNo));
+    renderPreview($('orderPreview'), '미리보기 · 내려받을 파일 내용과 같아요', [
+      { name: '송장', rows: r.labels, header: C.LABEL_COLUMNS, isMiss: row => missNos.has(row.고객주문번호) },
+      ...vendors.map(v => ({ name: `발주서 · ${v}`, rows: r.purchaseOrders[v], header: C.PO_COLUMNS })),
+    ]);
   }
 
   function showTracking(r) {
@@ -254,6 +323,9 @@
     $('noOrderBox').hidden = !r.noOrderNo.length;
     fillList($('noOrderList'), r.noOrderNo.map(t => `송장 ${t || '(번호 없음)'}`));
     $('downloadDispatch').disabled = !r.rows.length;
+    renderPreview($('trackingPreview'), '미리보기 · 내려받을 파일 내용과 같아요', [
+      { name: '일괄발송', rows: r.rows, header: C.DISPATCH_COLUMNS },
+    ]);
   }
 
   // 파일 상자: 고른 파일 이름 표시 + 끌어다 놓기

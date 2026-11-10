@@ -28,7 +28,7 @@ const SAMPLE_ORDERS = (() => {
       주문번호: `20261110${String(1000 + Math.floor(i / 2)).padStart(6, '0')}`,
       상품주문번호: `202611100${String(10001 + i)}`,
       구매자명: names[i % names.length],
-      상품명: i === 19 ? '수제 딸기잼 500g' : products[i % products.length],
+      상품명: i === 2 ? '수제 딸기잼 500g' : products[i % products.length],
       옵션정보: options[i % options.length],
       수량: String((i % 3) + 1),
       수취인명: names[(i + 3) % names.length],
