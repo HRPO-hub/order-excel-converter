@@ -155,3 +155,16 @@ test('송장번호 결과 필수 열 누락', () => {
   assert.equal(r.ok, false);
   assert.match(r.error, /운송장번호/);
 });
+
+const { SAMPLE_ORDERS, SAMPLE_MAPPING, sampleTracking } = require('./sample.js');
+
+test('샘플: 20건, 거래처 3곳, 미매칭 1건', () => {
+  const r = convertOrders(SAMPLE_ORDERS, SAMPLE_MAPPING);
+  assert.equal(r.ok, true);
+  assert.equal(r.labels.length, 20);
+  assert.equal(Object.keys(r.purchaseOrders).length, 3);
+  assert.equal(r.unmatched.length, 1);
+  const t = convertTracking(sampleTracking(r.labels));
+  assert.equal(t.rows.length, 19);
+  assert.equal(t.missing.length, 1);
+});
