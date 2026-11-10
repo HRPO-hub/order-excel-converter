@@ -168,3 +168,20 @@ test('샘플: 20건, 거래처 3곳, 미매칭 1건', () => {
   assert.equal(t.rows.length, 19);
   assert.equal(t.missing.length, 1);
 });
+
+test('주문번호 빈 송장 행은 일괄발송에서 제외하고 송장번호로 경고', () => {
+  const r = convertTracking([
+    { 고객주문번호: '1', 운송장번호: 'A' },
+    { 고객주문번호: '', 운송장번호: '684100000001' },
+    { 고객주문번호: '', 운송장번호: '684100000002' },
+  ]);
+  assert.deepEqual(r.rows.map(x => x.상품주문번호), ['1']);
+  assert.deepEqual(r.duplicates, []);
+  assert.deepEqual(r.noOrderNo, ['684100000001', '684100000002']);
+});
+
+test('거래처명이 constructor 같은 이름이어도 동작', () => {
+  const r = convertOrders([order()], [{ 상품명: '국산 햇양파 3kg', 거래처: 'constructor' }]);
+  assert.equal(r.ok, true);
+  assert.equal(r.purchaseOrders['constructor'].length, 1);
+});

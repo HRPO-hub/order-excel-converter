@@ -78,6 +78,7 @@
       <p class="summary" id="trackingSummary"></p>
       <div class="warn" id="missingBox" hidden>송장번호가 비어 있어 빠진 주문이 있어요.<ul id="missingList"></ul></div>
       <div class="warn" id="dupBox" hidden>같은 주문번호가 여러 번 있어 첫 번째만 썼어요.<ul id="dupList"></ul></div>
+      <div class="warn" id="noOrderBox" hidden>주문번호가 없는 송장은 스마트스토어에 올릴 수 없어 뺐어요(직접 보낸 택배 등).<ul id="noOrderList"></ul></div>
       <div class="row"><button class="primary" id="downloadDispatch">일괄발송 파일 내려받기</button></div>
     </div>
     <div class="error" id="trackingError" hidden></div>
@@ -154,13 +155,20 @@
     fillList($('missingList'), r.missing.map(n => `주문 ${n}`));
     $('dupBox').hidden = !r.duplicates.length;
     fillList($('dupList'), r.duplicates.map(n => `주문 ${n}`));
+    $('noOrderBox').hidden = !r.noOrderNo.length;
+    fillList($('noOrderList'), r.noOrderNo.map(t => `송장 ${t || '(번호 없음)'}`));
     $('downloadDispatch').disabled = !r.rows.length;
   }
 
+  // 파일을 새로 고르면 이전 결과(샘플 포함)를 지워 엉뚱한 파일을 내려받지 않게 한다
   $('orderFile').onchange = $('mappingFile').onchange = () => {
+    orderOut = null; $('orderResult').hidden = true; showError('orderError', '');
     $('convertOrders').disabled = !($('orderFile').files[0] && $('mappingFile').files[0]);
   };
-  $('trackingFile').onchange = () => { $('convertTracking').disabled = !$('trackingFile').files[0]; };
+  $('trackingFile').onchange = () => {
+    trackingOut = null; $('trackingResult').hidden = true; showError('trackingError', '');
+    $('convertTracking').disabled = !$('trackingFile').files[0];
+  };
 
   $('convertOrders').onclick = async () => {
     try {

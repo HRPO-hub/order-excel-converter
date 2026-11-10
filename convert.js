@@ -58,7 +58,7 @@ function convertOrders(orderRows, mappingRows) {
     고객주문번호: o.상품주문번호,
   }));
 
-  const purchaseOrders = {};
+  const byVendor = new Map(); // 거래처명이 'constructor', '__proto__' 등이어도 안전
   const unmatched = [];
   for (const o of orders) {
     const vendor = vendorOf.get(o.상품명);
@@ -66,7 +66,8 @@ function convertOrders(orderRows, mappingRows) {
       unmatched.push({ orderNo: o.상품주문번호, productName: o.상품명 });
       continue;
     }
-    (purchaseOrders[vendor] ??= []).push({
+    if (!byVendor.has(vendor)) byVendor.set(vendor, []);
+    byVendor.get(vendor).push({
       상품주문번호: o.상품주문번호,
       상품명: o.상품명,
       옵션: o.옵션정보,
@@ -79,7 +80,7 @@ function convertOrders(orderRows, mappingRows) {
     });
   }
 
-  return { ok: true, labels, purchaseOrders, unmatched };
+  return { ok: true, labels, purchaseOrders: Object.fromEntries(byVendor), unmatched };
 }
 
 function convertTracking(rows) {
@@ -92,8 +93,13 @@ function convertTracking(rows) {
   const out = [];
   const missing = [];
   const duplicates = [];
+  const noOrderNo = []; // 수동 발송 등 주문번호 없는 송장: 스마트스토어에 올릴 수 없음
   for (const r of data) {
     const no = r[orderNo];
+    if (!no) {
+      noOrderNo.push(r[trackingNo]);
+      continue;
+    }
     if (seen.has(no)) {
       if (!duplicates.includes(no)) duplicates.push(no);
       continue;
@@ -105,7 +111,7 @@ function convertTracking(rows) {
     }
     out.push({ 상품주문번호: no, 배송방법: DISPATCH_FIXED.method, 택배사: DISPATCH_FIXED.carrier, 송장번호: r[trackingNo] });
   }
-  return { ok: true, rows: out, missing, duplicates };
+  return { ok: true, rows: out, missing, duplicates, noOrderNo };
 }
 
 function safeFileName(name) {
